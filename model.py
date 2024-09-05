@@ -46,41 +46,37 @@ def get_val_loss(model, val_loader):
     model.eval()  # 设置模型为评估模式
     total_loss = 0
     correct = 0
+    loss_function = nn.MSELoss().to(device)
     with torch.no_grad():  # 在评估模式下不计算梯度
         for inputs, targets in val_loader:  # 遍历 DataLoader 中的每个批次
+            val_loss = []
             inputs, targets = inputs.to(device), targets.to(device)
             out = model(inputs)  # 模型预测
 
             # 计算损失
-            loss_function = torch.nn.CrossEntropyLoss().to(device)
             loss = loss_function(out, targets)
             total_loss += loss.item()
 
-            # 计算准确率
-            _, pred = out.max(dim=1)
-            correct += (pred == targets).sum().item()
-
     avg_loss = total_loss / len(val_loader)  # 平均损失
-    accuracy = correct / len(val_loader.dataset)  # 准确率
     model.train()  # 恢复训练模式
 
-    return avg_loss, accuracy
+    return avg_loss
 
 
 def train(args, dtr, val, path):
-    input_size, hidden_size, num_layers = args.input_size, args.hidden_size, args.num_layers
-    output_size = args.output_size
+    (input_size, output_size, hidden_size,
+     num_layers,batch_size, lr, step_size, gamma) = (args.input_size, args.output_size,args.hidden_size,
+                                                     args.num_layers,args.batch_size,args.lr,
+                                                     args.step_size, args.gamma)
 
-    model = LSTM(input_size, hidden_size, num_layers, output_size, batch_size=args.batch_size).to(device)
+    model = LSTM(input_size, hidden_size, num_layers, output_size, batch_size).to(device)
 
     loss_function = nn.MSELoss().to(device)
     if args.optimizer == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
-                                     weight_decay=args.weight_decay)
+        optimizer = torch.optim.Adam(model.parameters(), lr, weight_decay=args.weight_decay)
     else:
-        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
-                                    momentum=0.9, weight_decay=args.weight_decay)
-    scheduler = StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
+        optimizer = torch.optim.SGD(model.parameters(), lr,0.9, weight_decay=args.weight_decay)
+    scheduler = StepLR(optimizer, step_size, gamma)
     # training
     min_epochs = 10
     best_model = None
@@ -88,18 +84,19 @@ def train(args, dtr, val, path):
     for epoch in tqdm(range(args.epochs)):
         train_loss = []
         for (seq, label) in dtr:
+            total = len(dtr)
             seq = seq.to(device)
             label = label.to(device)
             y_pred = model(seq)
             loss = loss_function(y_pred, label)
             train_loss.append(loss.item())
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            optimizer.zero_grad()#清零优化器中所有参数的梯度。PyTorch 会在每次反向传播时累积梯度，因此需要在每个批次训练之前清零。
+            loss.backward()#计算损失函数对模型参数的梯度
+            optimizer.step()#根据计算出的梯度更新模型参数
 
-        scheduler.step()
+        scheduler.step()#更新学习率调度器。根据设定的步长和缩放因子调整学习率。
         # validation
-        val_loss,accuracy = get_val_loss(model, val)
+        val_loss = get_val_loss(model, val)
         if epoch > min_epochs and val_loss < min_val_loss:
             min_val_loss = val_loss
             best_model = copy.deepcopy(model)
@@ -122,12 +119,11 @@ def test(args, dte, path, m, n):
     pred = []
     y = []
     print('loading models...')
-    input_size, hidden_size, num_layers = args.input_size, args.hidden_size, args.num_layers
-    output_size = args.output_size
+    input_size, output_size, hidden_size, num_layers = (args.input_size, args.output_size,
+                                                        args.hidden_size, args.num_layers)
 
     model = LSTM(input_size, hidden_size, num_layers, output_size, batch_size=args.batch_size).to(device)
 
-    # models = LSTM(input_size, hidden_size, num_layers, output_size, batch_size=args.batch_size).to(device)
     model.load_state_dict(torch.load(path)['models'])
     model.eval()
     print('predicting...')
@@ -146,12 +142,14 @@ def test(args, dte, path, m, n):
     print('mape:', get_mape(y, pred))
     # plot
     x = [i for i in range(1, 151)]
-    x_smooth = np.linspace(np.min(x), np.max(x), 900)
-    y_smooth = make_interp_spline(x, y[150:300])(x_smooth)
-    plt.plot(x_smooth, y_smooth, c='green', marker='*', ms=1, alpha=0.75, label='true')
+    # x_smooth = np.linspace(np.min(x), np.max(x), 900)
+    # y_smooth = make_interp_spline(x, y[150:300])(x_smooth)
+    # plt.plot(x_smooth, y_smooth, c='green', marker='*', ms=1, alpha=0.75, label='true')
+    plt.plot(x, y[150:300], c='green', marker='*', ms=1, alpha=0.75, label='true')
 
-    y_smooth = make_interp_spline(x, pred[150:300])(x_smooth)
-    plt.plot(x_smooth, y_smooth, c='red', marker='o', ms=1, alpha=0.75, label='pred')
+    # y_smooth = make_interp_spline(x, pred[150:300])(x_smooth)
+    # plt.plot(x_smooth, y_smooth, c='red', marker='o', ms=1, alpha=0.75, label='pred')
+    plt.plot(x, pred[150:300], c='red', marker='*', ms=1, alpha=0.75, label='true')
     plt.grid(axis='y')
     plt.legend()
     plt.show()

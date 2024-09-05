@@ -6,8 +6,7 @@ from torch.utils.data import Dataset, DataLoader
 
 def load_data(file_name):
     df = pd.read_csv('data/' + file_name, encoding='gbk')
-    columns = df.columns
-    df.fillna(df.mean(), inplace=True)
+    df.fillna(df.mean(), inplace=True)#将NAN替换成每列均值
     return df
 
 class MyDataset(Dataset):
