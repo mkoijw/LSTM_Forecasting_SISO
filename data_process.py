@@ -19,18 +19,24 @@ class MyDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
-def nn_seq_us(b,file_name):
+def nn_seq_us(args,b,file_name):
     print('data processing...')
     dataset = load_data(file_name)
     # split
     train = dataset[:int(len(dataset) * 0.6)]
     val = dataset[int(len(dataset) * 0.6):int(len(dataset) * 0.8)]
     test = dataset[int(len(dataset) * 0.8):len(dataset)]
-    m, n = np.max(train[train.columns[1]]), np.min(train[train.columns[1]])
+    if args.inout_mode == 'SISO':
+        m, n = np.max(train[train.columns[1]]), np.min(train[train.columns[1]])
+    else:
+        m = train.iloc[:, 0:6].max(axis=0).values  # 每列的最大值
+        n = train.iloc[:, 0:6].min(axis=0).values  # 每列的最小值
 
     def process(data, batch_size):
-        # load = data[data.columns[1]]
-        load = np.array(data[data.columns[1]])
+        if args.inout_mode == 'SISO':
+            load = np.array(data[data.columns[1]])
+        else:
+            load = np.array(data.iloc[:, 0:6])
         load = np.array(load.tolist())
         data = data.values.tolist()
         load = (load - n) / (m - n)
@@ -39,12 +45,21 @@ def nn_seq_us(b,file_name):
             train_seq = []
             train_label = []
             for j in range(i, i + 24):
-                x = [load[j]]
+                if args.inout_mode == 'SISO':
+                    x = [load[j]]
+                else:
+                    x = load[j]
                 train_seq.append(x)
             # for c in range(2, 8):
             #     train_seq.append(data[i + 24][c])
-            train_label.append(load[i + 24])
-            train_seq = torch.FloatTensor(train_seq)
+            if args.inout_mode == 'SISO':
+                train_label.append(load[i + 24])
+            else:
+                train_label.append(load[i + 24][0])  # 取第 i + 24 行的第一列数据
+            # train_seq = torch.FloatTensor(train_seq)
+            train_seq = np.array(train_seq)  # 将列表转换为 NumPy 数组
+            train_seq = torch.FloatTensor(train_seq)  # 将 NumPy 数组转换为 PyTorch 张量
+
             train_label = torch.FloatTensor(train_label).view(-1)
             seq.append((train_seq, train_label))
 

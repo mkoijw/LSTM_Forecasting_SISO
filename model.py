@@ -103,7 +103,7 @@ def train(args, dtr, val, path):
 
         print('epoch {:03d} train_loss {:.8f} val_loss {:.8f}'.format(epoch, np.mean(train_loss), val_loss))
         model.train()
-
+    # best_model = copy.deepcopy(model)
     state = {'models': best_model.state_dict()}
     torch.save(state, path)
 
@@ -119,8 +119,8 @@ def test(args, dte, path, m, n):
     pred = []
     y = []
     print('loading models...')
-    input_size, output_size, hidden_size, num_layers = (args.input_size, args.output_size,
-                                                        args.hidden_size, args.num_layers)
+    input_size, output_size, hidden_size, num_layers, inout_mode= (args.input_size, args.output_size,
+                                                        args.hidden_size, args.num_layers, args.inout_mode)
 
     model = LSTM(input_size, hidden_size, num_layers, output_size, batch_size=args.batch_size).to(device)
 
@@ -136,20 +136,22 @@ def test(args, dte, path, m, n):
             y_pred = list(chain.from_iterable(y_pred.data.tolist()))
             pred.extend(y_pred)
 
-    y, pred = np.array(y), np.array(pred)
-    y = (m - n) * y + n
-    pred = (m - n) * pred + n
+    y, pred = np.array(y), np.array(pred)# 变成 (1, 6)
+    if args.inout_mode == 'SISO':
+        y = y * (m - n) + n
+        pred = (m - n) * pred + n
+    else:
+        y =  y * (m[0] - n[0]) + n[0]
+        pred = (m[0] - n[0]) * pred + n[0]
     print('mape:', get_mape(y, pred))
     # plot
     x = [i for i in range(1, 151)]
     # x_smooth = np.linspace(np.min(x), np.max(x), 900)
     # y_smooth = make_interp_spline(x, y[150:300])(x_smooth)
-    # plt.plot(x_smooth, y_smooth, c='green', marker='*', ms=1, alpha=0.75, label='true')
     plt.plot(x, y[150:300], c='green', marker='*', ms=1, alpha=0.75, label='true')
 
     # y_smooth = make_interp_spline(x, pred[150:300])(x_smooth)
-    # plt.plot(x_smooth, y_smooth, c='red', marker='o', ms=1, alpha=0.75, label='pred')
-    plt.plot(x, pred[150:300], c='red', marker='*', ms=1, alpha=0.75, label='true')
+    plt.plot(x, pred[150:300], c='red', marker='*', ms=1, alpha=0.75, label='pred')
     plt.grid(axis='y')
     plt.legend()
     plt.show()
